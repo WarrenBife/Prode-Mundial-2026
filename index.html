@@ -23,6 +23,16 @@
   }
   .logo-img{width:140px;mix-blend-mode:screen;margin-bottom:8px;display:block;margin-left:auto;margin-right:auto;}
 
+  /* PELOTAS DE FONDO */
+  #balls-bg{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden;}
+  .ball{position:absolute;top:-80px;font-size:28px;opacity:0;animation:fall linear infinite;}
+  @keyframes fall{
+    0%  {transform:translateY(0)    rotate(0deg);  opacity:0;}
+    5%  {opacity:.18;}
+    90% {opacity:.18;}
+    100%{transform:translateY(110vh) rotate(720deg); opacity:0;}
+  }
+
   /* LOADING */
   #loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:200;}
   .dots{display:flex;gap:8px;}
@@ -187,6 +197,9 @@
 </head>
 <body>
 
+<!-- PELOTAS DE FONDO -->
+<div id="balls-bg"></div>
+
 <!-- LOADING -->
 <div id="loading">
   <img src="Logo App.jpeg" class="logo-img" alt="Mundial 2026" style="width:160px;">
@@ -290,6 +303,23 @@
 <div id="toast" class="toast"></div>
 
 <script>
+// ── PELOTAS ANIMADAS ─────────────────────────────────────
+(function() {
+  const bg = document.getElementById('balls-bg');
+  const COUNT = 18;
+  for (let i = 0; i < COUNT; i++) {
+    const b = document.createElement('span');
+    b.className = 'ball';
+    b.textContent = '⚽';
+    const size     = 18 + Math.random() * 22;          // 18–40px
+    const left     = Math.random() * 100;              // 0–100%
+    const duration = 10 + Math.random() * 18;          // 10–28s
+    const delay    = -(Math.random() * duration);      // start mid-fall
+    b.style.cssText = `left:${left}%;font-size:${size}px;animation-duration:${duration}s;animation-delay:${delay}s;`;
+    bg.appendChild(b);
+  }
+})();
+
 // ── FIREBASE ─────────────────────────────────────────────
 const firebaseConfig = {
   apiKey:            "AIzaSyBfmzTGFJkxZLVZF5ub7OIYeQ272kuTeD4",
