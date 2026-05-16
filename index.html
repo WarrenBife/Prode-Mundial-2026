@@ -232,7 +232,9 @@
     <div id="ps-list" class="p-list"></div>
     <div class="divider">o ingresá como nuevo</div>
     <label class="lbl" for="ps-name">Tu nombre</label>
-    <input id="ps-name" class="inp" type="text" placeholder="ej: Juan">
+    <input id="ps-name" class="inp" type="text" placeholder="ej: Juan" oninput="onNameInput()">
+    <label class="lbl" id="ps-pin-lbl" for="ps-pin">Elegí un código personal</label>
+    <input id="ps-pin" class="inp" type="password" placeholder="ej: 1234" autocomplete="off">
     <div id="ps-err" class="err"></div>
     <button class="btn btn-primary" onclick="enterAsPlayer()">JUGAR →</button>
     <button class="btn btn-ghost" onclick="showHome()">← Cambiar sala</button>
@@ -508,6 +510,8 @@ async function showPlayerScreen(data) {
   document.getElementById('player-screen').classList.add('active');
   document.getElementById('ps-err').style.display = 'none';
   document.getElementById('ps-name').value = '';
+  document.getElementById('ps-pin').value = '';
+  document.getElementById('ps-pin-lbl').textContent = 'Elegí un código personal';
   const snap = await db.collection('prode_rooms').doc(currentRoom).collection('players').get();
   const listEl = document.getElementById('ps-list');
   listEl.innerHTML = '';
@@ -522,6 +526,9 @@ async function showPlayerScreen(data) {
         document.querySelectorAll('.p-chip').forEach(c => c.classList.remove('sel'));
         chip.classList.add('sel');
         document.getElementById('ps-name').value = doc.data().name;
+        document.getElementById('ps-pin-lbl').textContent = 'Ingresá tu código personal';
+        document.getElementById('ps-pin').value = '';
+        document.getElementById('ps-pin').focus();
       };
       listEl.appendChild(chip);
     });
@@ -580,28 +587,48 @@ async function createRoom() {
   }
 }
 
+function onNameInput() {
+  document.querySelectorAll('.p-chip').forEach(c => c.classList.remove('sel'));
+  document.getElementById('ps-pin-lbl').textContent = 'Elegí un código personal';
+}
+
 async function enterAsPlayer() {
   const name = document.getElementById('ps-name').value.trim();
-  if (!name) {
-    const e = document.getElementById('ps-err');
-    e.textContent = 'Ingresá tu nombre'; e.style.display = 'block'; return;
-  }
+  const pin  = document.getElementById('ps-pin').value.trim();
+  const err  = document.getElementById('ps-err');
+  if (!name) { err.textContent = 'Ingresá tu nombre';           err.style.display = 'block'; return; }
+  if (!pin)  { err.textContent = 'Ingresá un código personal';  err.style.display = 'block'; return; }
+  err.style.display = 'none';
   document.getElementById('loading').style.display = 'flex';
   try {
-    const pid = name.toLowerCase().replace(/\s+/g,'-');
+    const pid  = name.toLowerCase().replace(/\s+/g,'-');
     const snap = await db.collection('prode_rooms').doc(currentRoom).collection('players').doc(pid).get();
     if (!snap.exists) {
+      // Jugador nuevo: crear con PIN
       await db.collection('prode_rooms').doc(currentRoom).collection('players').doc(pid).set({
-        name, predictions: {}
+        name, predictions: {}, pin
       });
+    } else {
+      const storedPin = snap.data().pin;
+      if (storedPin && storedPin !== pin) {
+        // PIN incorrecto
+        document.getElementById('loading').style.display = 'none';
+        err.textContent = 'Código incorrecto'; err.style.display = 'block';
+        document.getElementById('ps-pin').value = '';
+        document.getElementById('ps-pin').focus();
+        return;
+      }
+      if (!storedPin) {
+        // Cuenta vieja sin PIN: guardar el que eligió ahora
+        await db.collection('prode_rooms').doc(currentRoom).collection('players').doc(pid).update({ pin });
+      }
     }
     currentPlayer = name;
     localStorage.setItem('prode_player', name);
     connectToRoom();
-  } catch (err) {
+  } catch (err2) {
     document.getElementById('loading').style.display = 'none';
-    const e = document.getElementById('ps-err');
-    e.textContent = 'Error: ' + err.message; e.style.display = 'block';
+    err.textContent = 'Error: ' + err2.message; err.style.display = 'block';
   }
 }
 
