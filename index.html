@@ -981,27 +981,40 @@ function renderTabla() {
     return;
   }
 
-  let html = '<div class="lb">';
+  // Card explicativa del bonus
+  let html = `<div style="background:rgba(245,200,66,.07);border:1px solid rgba(245,200,66,.25);border-radius:12px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+    <span style="font-size:22px">⭐</span>
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--gold)">Bonus por clasificados</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Cada equipo que predijiste que clasificaría de grupos y acertaste suma <strong style="color:var(--gold)">+1 punto</strong> extra.</div>
+    </div>
+  </div>`;
+
+  html += '<div class="lb">';
   rows.forEach((r, i) => {
     const rc  = i === 0 ? 'r1' : i === 1 ? 'r2' : i === 2 ? 'r3' : '';
     const me  = r.name === currentPlayer ? 'me' : '';
     const tag = r.name === currentPlayer ? ' <span style="font-size:10px;color:var(--blue)">(vos)</span>' : '';
+    const matchPts = r.pts - r.bonus;
+    const bonusStr = groupsDone
+      ? `<span style="color:var(--gold);font-weight:600">+${r.bonus}⭐</span>`
+      : `<span style="color:var(--text-dim)">⭐ pendiente</span>`;
     html += `
     <div class="lb-row">
       <div class="lb-num ${rc}">${i+1}</div>
       <div style="flex:1">
         <div class="lb-name ${me}">${r.name}${tag}</div>
-        <div class="lb-break">🎯 ${r.exact} exactos &nbsp;✅ ${r.result1} resultado${r.bonus ? ` &nbsp;⭐ ${r.bonus} clasificados` : ''}</div>
+        <div class="lb-break">🎯 ${r.exact} exactos &nbsp;✅ ${r.result1} resultado &nbsp;${bonusStr}</div>
       </div>
       <div style="text-align:right">
         <div class="lb-pts">${r.pts}</div>
-        <div class="lb-plab">PTS</div>
+        <div class="lb-plab">${groupsDone ? `${matchPts}+${r.bonus} PTS` : 'PTS'}</div>
       </div>
     </div>`;
   });
   html += '</div>';
   html += `<div style="font-size:11px;color:var(--text-dim);text-align:center;margin-top:10px;">
-    🎯 Exacto = 3 pts &nbsp;|&nbsp; ✅ Resultado = 1 pt${groupsDone ? ' &nbsp;|&nbsp; ⭐ Clasificado acertado = 1 pt' : ''}</div>`;
+    🎯 Exacto = 3 pts &nbsp;|&nbsp; ✅ Resultado = 1 pt &nbsp;|&nbsp; ⭐ Clasificado acertado = 1 pt</div>`;
   el.innerHTML = html;
 }
 
