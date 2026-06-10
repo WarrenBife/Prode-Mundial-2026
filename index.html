@@ -171,6 +171,19 @@
   .goal-item.away{color:var(--text-dim);}
   .match-group-tag{font-size:10px;color:var(--text-dim);letter-spacing:1px;text-align:center;margin-top:4px;}
 
+  /* CLASIFICADOS PREDICHOS */
+  .qual-section{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:16px;}
+  .qual-title{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px;font-weight:600;display:flex;align-items:center;gap:8px;}
+  .qual-title::after{content:'';flex:1;height:1px;background:var(--border);}
+  .qual-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:10px;}
+  .qual-group{display:flex;flex-direction:column;align-items:center;gap:2px;}
+  .qual-g-label{font-size:9px;color:var(--text-dim);font-weight:700;letter-spacing:1px;}
+  .qual-flag{font-size:18px;line-height:1.3;border-radius:4px;padding:0 2px;}
+  .qual-flag.q-ok{filter:drop-shadow(0 0 5px var(--green));}
+  .qual-flag.q-miss{opacity:.3;filter:grayscale(1);}
+  .qual-thirds-row{display:flex;flex-wrap:wrap;gap:4px;align-items:center;}
+  .qual-thirds-label{font-size:9px;color:var(--text-dim);font-weight:700;letter-spacing:1px;margin-right:2px;}
+
   /* ADMIN OVERLAYS */
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:150;display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;}
   .overlay.active{display:flex;}
@@ -807,7 +820,44 @@ function renderPredict() {
   }
 
   if (phase === 'groups_open' || phase === 'groups_locked') {
-    let html = '';
+    const predQ  = calcQualifiers(myPreds);
+    const actualQ = phase === 'groups_locked' ? calcQualifiers(roomData.results || {}) : null;
+    const flagOf = (team, cls) => {
+      const ti = TI[team] || { f: team };
+      return `<span class="qual-flag ${cls}" title="${(TI[team]||{n:team}).n}">${ti.f}</span>`;
+    };
+
+    let qHtml = `<div class="qual-section"><div class="qual-title">Tus clasificados predichos</div>`;
+    qHtml += `<div class="qual-grid">`;
+    for (const [g, teams] of Object.entries(GROUPS)) {
+      const st = calcGroupStandings(teams, myPreds);
+      const f  = st[0]?.team, s = st[1]?.team;
+      const clsF = actualQ ? (actualQ.all.has(f) ? 'q-ok' : f ? 'q-miss' : '') : '';
+      const clsS = actualQ ? (actualQ.all.has(s) ? 'q-ok' : s ? 'q-miss' : '') : '';
+      qHtml += `<div class="qual-group">
+        <div class="qual-g-label">${g}</div>
+        ${f ? flagOf(f, clsF) : '<span class="qual-flag" style="opacity:.2">—</span>'}
+        ${s ? flagOf(s, clsS) : '<span class="qual-flag" style="opacity:.2">—</span>'}
+      </div>`;
+    }
+    qHtml += `</div>`;
+    if (predQ.thirds.length) {
+      qHtml += `<div class="qual-thirds-row"><span class="qual-thirds-label">3°</span>`;
+      predQ.thirds.forEach(t => {
+        const cls = actualQ ? (actualQ.all.has(t.team) ? 'q-ok' : 'q-miss') : '';
+        qHtml += flagOf(t.team, cls);
+      });
+      qHtml += `</div>`;
+    }
+    if (actualQ) {
+      const acertados = [...predQ.all].filter(t => actualQ.all.has(t)).length;
+      qHtml += `<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">
+        ✅ <strong style="color:var(--green)">${acertados}</strong> de 32 clasificados acertados → <strong style="color:var(--gold)">+${acertados} pts bonus</strong>
+      </div>`;
+    }
+    qHtml += `</div>`;
+
+    let html = qHtml;
     for (const [g] of Object.entries(GROUPS)) {
       html += `<div class="grp-section"><div class="grp-title">GRUPO ${g}</div>`;
       GROUP_MATCHES.filter(m => m.group === g).forEach(m => { html += matchCard(m, isOpen); });
@@ -885,6 +935,8 @@ function matchCard(m, isOpen) {
 
 const predTimers = {};
 function setPred(matchId, side, val) {
+  const phase = roomData?.phase || 'groups_open';
+  if (phase !== 'groups_open' && phase !== 'knockout_open') return;
   if (!myPreds[matchId]) myPreds[matchId] = {};
   myPreds[matchId][side] = val === '' ? '' : (parseInt(val) || 0);
   clearTimeout(predTimers[matchId]);
@@ -901,6 +953,10 @@ function renderTabla() {
   const el      = document.getElementById('tabla-content');
   const results = roomData?.results || {};
 
+  const phase     = roomData?.phase || 'groups_open';
+  const groupsDone = phase !== 'groups_open' && phase !== 'groups_locked';
+  const actualQ   = groupsDone ? calcQualifiers(results) : null;
+
   const rows = Object.values(playersData).map(p => {
     let pts = 0, exact = 0, result1 = 0;
     Object.keys(results).forEach(mid => {
@@ -911,7 +967,13 @@ function renderTabla() {
       if (p2 === 3) exact++;
       if (p2 === 1) result1++;
     });
-    return { name: p.name, pts, exact, result1 };
+    let bonus = 0;
+    if (actualQ) {
+      const predQ = calcQualifiers(p.predictions || {});
+      predQ.all.forEach(team => { if (actualQ.all.has(team)) bonus++; });
+    }
+    pts += bonus;
+    return { name: p.name, pts, exact, result1, bonus };
   }).sort((a,b) => b.pts - a.pts || b.exact - a.exact);
 
   if (!rows.length) {
@@ -929,7 +991,7 @@ function renderTabla() {
       <div class="lb-num ${rc}">${i+1}</div>
       <div style="flex:1">
         <div class="lb-name ${me}">${r.name}${tag}</div>
-        <div class="lb-break">🎯 ${r.exact} exactos &nbsp;✅ ${r.result1} resultado</div>
+        <div class="lb-break">🎯 ${r.exact} exactos &nbsp;✅ ${r.result1} resultado${r.bonus ? ` &nbsp;⭐ ${r.bonus} clasificados` : ''}</div>
       </div>
       <div style="text-align:right">
         <div class="lb-pts">${r.pts}</div>
@@ -939,7 +1001,7 @@ function renderTabla() {
   });
   html += '</div>';
   html += `<div style="font-size:11px;color:var(--text-dim);text-align:center;margin-top:10px;">
-    🎯 Marcador exacto = 3 pts &nbsp;|&nbsp; ✅ Resultado correcto = 1 pt</div>`;
+    🎯 Exacto = 3 pts &nbsp;|&nbsp; ✅ Resultado = 1 pt${groupsDone ? ' &nbsp;|&nbsp; ⭐ Clasificado acertado = 1 pt' : ''}</div>`;
   el.innerHTML = html;
 }
 
@@ -1177,6 +1239,67 @@ function calcPts(pred, result) {
   return 0;
 }
 
+// ── STANDINGS & CLASIFICADOS ─────────────────────────────
+
+function calcGroupStandings(teams, results) {
+  const s = {};
+  teams.forEach(t => s[t] = { pts:0, gf:0, ga:0, gd:0 });
+  GROUP_MATCHES.filter(m => teams.includes(m.home)).forEach(m => {
+    const r = results[m.id];
+    if (!r || r.h === '' || r.h === undefined || r.a === undefined || r.a === '') return;
+    const h = parseInt(r.h), a = parseInt(r.a);
+    if (isNaN(h) || isNaN(a)) return;
+    s[m.home].gf += h; s[m.home].ga += a; s[m.home].gd += h - a;
+    s[m.away].gf += a; s[m.away].ga += h; s[m.away].gd += a - h;
+    if (h > a)      { s[m.home].pts += 3; }
+    else if (h===a) { s[m.home].pts++;  s[m.away].pts++; }
+    else            { s[m.away].pts += 3; }
+  });
+  return Object.entries(s)
+    .sort(([,a],[,b]) => b.pts-a.pts || b.gd-a.gd || b.gf-a.gf)
+    .map(([team, st], i) => ({ team, pos: i+1, ...st }));
+}
+
+function calcQualifiers(results) {
+  const firsts = [], seconds = [], thirds = [];
+  for (const [g, teams] of Object.entries(GROUPS)) {
+    const st = calcGroupStandings(teams, results);
+    if (st[0]) firsts.push({ team: st[0].team, group: g });
+    if (st[1]) seconds.push({ team: st[1].team, group: g });
+    if (st[2]) thirds.push({ team: st[2].team, group: g, ...st[2] });
+  }
+  thirds.sort((a, b) => b.pts-a.pts || b.gd-a.gd || b.gf-a.gf);
+  const best8 = thirds.slice(0, 8);
+  return {
+    firsts, seconds, thirds: best8,
+    all: new Set([...firsts.map(t=>t.team), ...seconds.map(t=>t.team), ...best8.map(t=>t.team)])
+  };
+}
+
+// Bracket R32: grupos adyacentes se cruzan
+const GROUP_PAIRS = [['A','B'],['C','D'],['E','F'],['G','H'],['I','J'],['K','L']];
+
+async function autoFillKnockoutSlots() {
+  const results = roomData?.results || {};
+  const q = calcQualifiers(results);
+  const updates = {};
+  GROUP_PAIRS.forEach(([g1, g2], i) => {
+    const h1 = q.firsts.find(t => t.group===g1)?.team;
+    const a1 = q.seconds.find(t => t.group===g2)?.team;
+    const h2 = q.firsts.find(t => t.group===g2)?.team;
+    const a2 = q.seconds.find(t => t.group===g1)?.team;
+    if (h1 && a1) updates[`knockoutSlots.R32_${i*2+1}`] = { home: h1, away: a1 };
+    if (h2 && a2) updates[`knockoutSlots.R32_${i*2+2}`] = { home: h2, away: a2 };
+  });
+  for (let i = 0; i < 4; i++) {
+    const t1 = q.thirds[i], t2 = q.thirds[7-i];
+    if (t1 && t2) updates[`knockoutSlots.R32_${13+i}`] = { home: t1.team, away: t2.team };
+  }
+  if (!Object.keys(updates).length) { toast('No hay resultados suficientes'); return; }
+  await db.collection('prode_rooms').doc(currentRoom).update(updates);
+  toast(`✓ ${Object.keys(updates).length} partidos del R32 generados`);
+}
+
 // ── ADMIN ────────────────────────────────────────────────
 function showAdminLogin() {
   if (isAdmin) { openAdminPanel(); return; }
@@ -1228,6 +1351,13 @@ function renderAdminPanel() {
   html += `</div></div>`;
 
   if (isGroup) {
+    if (phase === 'groups_locked') {
+      html += `<div class="asec">
+        <div class="asec-title">Clasificados automáticos</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Genera los 16 partidos del R32 en base a los resultados de grupos cargados. Requiere todos los resultados completos.</div>
+        <button class="btn btn-primary" onclick="autoFillKnockoutSlots()" style="margin-bottom:0">⚡ Generar R32 automáticamente</button>
+      </div>`;
+    }
     html += `<div class="asec"><div class="asec-title">Cargar resultados — Fase de Grupos</div>`;
     for (const [g] of Object.entries(GROUPS)) {
       html += `<div style="font-size:10px;letter-spacing:1px;color:var(--text-dim);margin:8px 0 4px">GRUPO ${g}</div>`;
