@@ -1393,8 +1393,14 @@ function renderPartidos() {
         scoreH   = live.homeScore ?? '-'; scoreA = live.awayScore ?? '-';
         statusHtml = `<span class="status-done">FINALIZADO</span>`;
       } else {
-        const localTime = new Date(m.utcDate).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
-        statusHtml = `<span class="status-time">${localTime}</span>`;
+        if (fb) {
+          isPlayed   = true;
+          scoreH     = fb.h; scoreA = fb.a;
+          statusHtml = `<span class="status-done">FINALIZADO</span>`;
+        } else {
+          const localTime = new Date(m.utcDate).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
+          statusHtml = `<span class="status-time">${localTime}</span>`;
+        }
       }
     } else if (fb) {
       isPlayed   = true;
