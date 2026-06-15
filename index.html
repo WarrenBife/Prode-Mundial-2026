@@ -782,59 +782,87 @@ function connectToRoom() {
   syncInterval = setInterval(syncResults, 5 * 60 * 1000);
 }
 
-// ── SYNC RESULTADOS ──────────────────────────────────────
+// ── SYNC RESULTADOS (ESPN) ───────────────────────────────
+function espnIsFinished(status) {
+  return status === 'STATUS_FINAL' || status === 'STATUS_FULL_TIME' ||
+         status === 'STATUS_FT' || (status || '').startsWith('STATUS_FINAL');
+}
+
+async function fetchEspnDay(dayStr) {
+  const [y, mo, d] = dayStr.split('-');
+  const ctrl = new AbortController();
+  const tid  = setTimeout(() => ctrl.abort(), 6000);
+  try {
+    const res = await fetch(
+      `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${y}${mo}${d}`,
+      { signal: ctrl.signal }
+    );
+    clearTimeout(tid);
+    return res.ok ? (await res.json()).events || [] : [];
+  } catch { clearTimeout(tid); return []; }
+}
+
 async function syncResults() {
   if (!currentRoom || !roomData) return;
-  try {
-    const res = await fetch('https://api.football-data.org/v4/competitions/WC/matches', {
-      headers: { 'X-Auth-Token': API_KEY }
-    });
-    if (!res.ok) return;
-    const data = await res.json();
-    if (!data.matches) return;
+  const currentResults = roomData.results || {};
+  const slots = roomData.knockoutSlots || {};
+  const now   = new Date();
 
-    const updates = {};
-    const currentResults = roomData.results || {};
-    const slots = roomData.knockoutSlots || {};
+  // Días únicos (local) con partidos que ya deberían haber terminado
+  const daysSet = new Set();
+  SCHEDULE.forEach(m => {
+    if (new Date(m.utcDate) < new Date(now.getTime() + 2 * 3600 * 1000))
+      daysSet.add(new Date(m.utcDate).toLocaleDateString('en-CA'));
+  });
 
-    data.matches.forEach(match => {
-      if (match.status !== 'FINISHED') return;
-      const h = match.score.fullTime.home;
-      const a = match.score.fullTime.away;
-      if (h === null || a === null) return;
-      const homeTla = match.homeTeam.tla;
-      const awayTla = match.awayTeam.tla;
+  const updates = {};
 
-      // Buscar en partidos de grupos (en cualquier orientación)
-      const { gm, flipped } = findGroupMatch(homeTla, awayTla);
+  await Promise.all([...daysSet].map(async dayStr => {
+    const events = await fetchEspnDay(dayStr);
+    events.forEach(evt => {
+      if (!espnIsFinished(evt.status?.type?.name)) return;
+      const comp  = evt.competitions?.[0];
+      if (!comp) return;
+      const homeC = comp.competitors?.find(c => c.homeAway === 'home');
+      const awayC = comp.competitors?.find(c => c.homeAway === 'away');
+      if (!homeC || !awayC) return;
+      const homeAbbr = homeC.team?.abbreviation?.toUpperCase();
+      const awayAbbr = awayC.team?.abbreviation?.toUpperCase();
+      const h = parseInt(homeC.score), a = parseInt(awayC.score);
+      if (isNaN(h) || isNaN(a)) return;
+
+      // Fase de grupos
+      const { gm, flipped } = findGroupMatch(homeAbbr, awayAbbr);
       if (gm) {
         const rh = flipped ? a : h, ra = flipped ? h : a;
         const ex = currentResults[gm.id];
         if (!ex || ex.h !== rh || ex.a !== ra) updates[`results.${gm.id}`] = { h: rh, a: ra };
         return;
       }
-
-      // Buscar en slots de fase eliminatoria
+      // Fase eliminatoria
       for (const [id, slot] of Object.entries(slots)) {
-        if (slot.home === homeTla && slot.away === awayTla) {
+        if (slot.home === homeAbbr && slot.away === awayAbbr) {
           const ex = currentResults[id];
           if (!ex || ex.h !== h || ex.a !== a) updates[`results.${id}`] = { h, a };
           break;
         }
+        if (slot.home === awayAbbr && slot.away === homeAbbr) {
+          const ex = currentResults[id];
+          if (!ex || ex.h !== a || ex.a !== h) updates[`results.${id}`] = { h: a, a: h };
+          break;
+        }
       }
     });
+  }));
 
-    if (Object.keys(updates).length > 0) {
-      await db.collection('prode_rooms').doc(currentRoom).update(updates);
-      toast(`✓ ${Object.keys(updates).length} resultado(s) sincronizado(s)`);
-    }
-
-    lastSync = new Date();
-    const el = document.getElementById('sync-time');
-    if (el) el.textContent = `Sync: ${lastSync.getHours()}:${String(lastSync.getMinutes()).padStart(2,'0')}`;
-  } catch (err) {
-    console.warn('Sync error:', err.message);
+  if (Object.keys(updates).length > 0) {
+    await db.collection('prode_rooms').doc(currentRoom).update(updates);
+    toast(`✓ ${Object.keys(updates).length} resultado(s) sincronizado(s)`);
   }
+
+  lastSync = new Date();
+  const el = document.getElementById('sync-time');
+  if (el) el.textContent = `Sync: ${lastSync.getHours()}:${String(lastSync.getMinutes()).padStart(2,'0')}`;
 }
 
 // ── RENDER ───────────────────────────────────────────────
@@ -1242,6 +1270,22 @@ async function fetchAndRenderDay() {
       fbResult,
     };
   });
+
+  // Auto-guardar resultados finalizados en Firestore
+  if (currentRoom && roomData) {
+    const autoUpdates = {};
+    dayMatchesData.forEach(m => {
+      if (!m.liveData || !espnIsFinished(m.liveData.status) || !m.matchId) return;
+      const h = parseInt(m.liveData.homeScore), a = parseInt(m.liveData.awayScore);
+      if (isNaN(h) || isNaN(a)) return;
+      const rh = m.flipped ? a : h, ra = m.flipped ? h : a;
+      const ex = (roomData.results || {})[m.matchId];
+      if (!ex || ex.h !== rh || ex.a !== ra) autoUpdates[`results.${m.matchId}`] = { h: rh, a: ra };
+    });
+    if (Object.keys(autoUpdates).length > 0)
+      db.collection('prode_rooms').doc(currentRoom).update(autoUpdates).catch(() => {});
+  }
+
   renderPartidos();
 }
 
