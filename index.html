@@ -1599,6 +1599,8 @@ function countdownStr(target) {
 // `flipped` ajusta la orientación si el fixture real invierte local/visitante.
 function roomPredsHtml(matchId, flipped) {
   if (!matchId) return '';
+  const phase = roomData?.phase || '';
+  if (phase === 'groups_open' || phase === 'knockout_open') return '';
   const players = Object.values(playersData);
   if (!players.length) return '';
   const storedResult = (roomData?.results || {})[matchId];
