@@ -1025,7 +1025,7 @@ function switchTab(name) {
     document.querySelectorAll('.tab')[i].classList.toggle('active', t === name);
     document.getElementById('panel-'+t).classList.toggle('active', t === name);
   });
-  if (name === 'partidos') startLivePolling();
+  if (name === 'partidos' || name === 'resultados') startLivePolling();
   else stopLivePolling();
   renderPanel(name);
 }
@@ -1427,84 +1427,12 @@ function renderTabla() {
 
 // ── PESTAÑA RESULTADOS ───────────────────────────────────
 function renderResultados() {
-  const el      = document.getElementById('resultados-content');
-  const results = roomData?.results || {};
-  const phase   = roomData?.phase   || 'groups_open';
-  const slots   = roomData?.knockoutSlots || {};
-  const isGroup = phase === 'groups_open' || phase === 'groups_locked';
-
-  if (!Object.keys(results).length) {
-    el.innerHTML = '<div class="empty"><div class="ico">⚽</div>Aún no hay resultados cargados.</div>';
-    return;
-  }
-
-  let html = '';
-  if (isGroup) {
-    for (const [g] of Object.entries(GROUPS)) {
-      const matches = GROUP_MATCHES.filter(m => m.group === g && results[m.id]);
-      if (!matches.length) continue;
-      html += `<div class="grp-section"><div class="grp-title">GRUPO ${g}</div>`;
-      matches.forEach(m => { html += resultCard(m, results[m.id], TI[m.home], TI[m.away]); });
-      html += `</div>`;
-    }
-  } else {
-    KO_ROUNDS.forEach(({ label, ids }) => {
-      const withRes = ids.filter(id => results[id] && slots[id]);
-      if (!withRes.length) return;
-      html += `<div class="round-section"><div class="round-title">${label}</div>`;
-      withRes.forEach(id => {
-        const s  = slots[id];
-        const t1 = TI[s.home] || { f: s.home, n: s.home };
-        const t2 = TI[s.away] || { f: s.away, n: s.away };
-        html += resultCard({ id }, results[id], t1, t2);
-      });
-      html += `</div>`;
-    });
-  }
-
-  el.innerHTML = html || '<div class="empty"><div class="ico">⚽</div>Aún no hay resultados.</div>';
-}
-
-function resultCard(m, res, t1, t2) {
-  const pred    = myPreds[m.id];
-  const hasPred = pred && pred.h !== '' && pred.h !== undefined;
-  const ko      = isKOMatch(m.id);
-  let basePts = null, totalPts = null;
-  if (hasPred) {
-    if (ko) { const kp = calcKoPts(pred, res); basePts = kp.base; totalPts = kp.total; }
-    else     { basePts = totalPts = calcPts(pred, res); }
-  }
-  const cls = basePts === 3 ? 'ok-exact' : basePts === 1 ? 'ok-result' : '';
-  let predStr = hasPred ? `Tu predicción: ${pred.h}-${pred.a}` : 'Sin predicción';
-  if (hasPred && ko && pred.winner) {
-    const wt = TI[pred.winner] || { f: pred.winner, n: pred.winner };
-    predStr += ` (pasa: ${wt.f} ${wt.n})`;
-  }
-  let ptsStr = '';
-  if (totalPts !== null) {
-    const pc = totalPts >= 3 ? 'pts3' : totalPts >= 1 ? 'pts1' : 'pts0';
-    ptsStr = `<span class="pts ${pc}">${totalPts > 0 ? '+'+totalPts : '0'} pts</span>`;
-  }
-  let resWinner = '';
-  if (ko && res.winner) {
-    const wt = TI[res.winner] || { f: res.winner, n: res.winner };
-    resWinner = ` &nbsp;<span class="ko-winner-result">Pasa: ${wt.f} ${wt.n}</span>`;
-  }
-  return `
-  <div class="match-card ${cls}">
-    <div class="mrow">
-      <div class="tname h">${t1?.n}</div>
-      <div class="tflag">${t1?.f}</div>
-      <div class="sinputs" style="pointer-events:none">
-        <span class="si" style="display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue'">${res.h}</span>
-        <span class="ssep">-</span>
-        <span class="si" style="display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue'">${res.a}</span>
-      </div>
-      <div class="tflag">${t2?.f}</div>
-      <div class="tname">${t2?.n}</div>
-    </div>
-    <div class="mresult">${predStr} ${ptsStr}${resWinner}</div>
-  </div>`;
+  const el = document.getElementById('resultados-content');
+  if (!el) return;
+  const openPreds = new Set(
+    Array.from(el.querySelectorAll('details.preds-box[open]')).map(d => d.dataset.mid)
+  );
+  el.innerHTML = buildDayMatchCards(openPreds);
 }
 
 // ── PESTAÑA PARTIDOS ─────────────────────────────────────
@@ -1642,6 +1570,7 @@ async function fetchAndRenderDay() {
   }
 
   renderPartidos();
+  renderResultados();
 }
 
 // ── PRÓXIMO PARTIDO + PREDICCIONES DE LA SALA ────────────
@@ -1730,9 +1659,6 @@ function renderPartidos() {
     Array.from(el.querySelectorAll('details.preds-box[open]')).map(d => d.dataset.mid)
   );
 
-  const opts = { weekday:'long', day:'numeric', month:'long' };
-  const dateLabel = dayDate.toLocaleDateString('es-AR', opts);
-
   let html = '';
 
   // ── HERO: próximo partido + lo que juega la sala ──
@@ -1778,18 +1704,22 @@ function renderPartidos() {
     }
   }
 
-  html += `
+  html += buildDayMatchCards(openPreds);
+  el.innerHTML = html;
+}
+
+function buildDayMatchCards(openPreds) {
+  const opts = { weekday:'long', day:'numeric', month:'long' };
+  const dateLabel = dayDate.toLocaleDateString('es-AR', opts);
+  let html = `
   <div class="day-nav">
     <button class="day-btn" onclick="changeDay(-1)">←</button>
     <span class="day-label">${dateLabel}</span>
     <button class="day-btn" onclick="changeDay(1)">→</button>
   </div>`;
 
-  if (!dayMatchesData.length) {
-    html += '<div class="empty"><div class="ico">📅</div>No hay partidos de la Copa del Mundo este día.</div>';
-    el.innerHTML = html;
-    return;
-  }
+  if (!dayMatchesData.length)
+    return html + '<div class="empty"><div class="ico">📅</div>No hay partidos de la Copa del Mundo este día.</div>';
 
   dayMatchesData.forEach(m => {
     const t1   = TI[m.home] || { f:'🏳️', n: m.home };
@@ -1842,11 +1772,10 @@ function renderPartidos() {
 
     const grpTag = m.group ? `<div class="match-group-tag">GRUPO ${m.group}</div>` : '';
 
-    // Goleadores (ESPN) + prode de la sala para este partido
     const golesHtml = live ? goalsHtml(live.goals) : '';
     const predsGrid = roomPredsHtml(m.matchId, m.flipped);
     const predsBox  = predsGrid
-      ? `<details class="preds-box" data-mid="${m.matchId}"${(isLive || openPreds.has(String(m.matchId))) ? ' open' : ''}><summary>Prode de la sala</summary>${predsGrid}</details>`
+      ? `<details class="preds-box" data-mid="${m.matchId}"${(isLive || (openPreds && openPreds.has(String(m.matchId)))) ? ' open' : ''}><summary>Prode de la sala</summary>${predsGrid}</details>`
       : '';
 
     html += `
@@ -1870,8 +1799,7 @@ function renderPartidos() {
       ${predsBox}
     </div>`;
   });
-
-  el.innerHTML = html;
+  return html;
 }
 
 // ── SCORING ──────────────────────────────────────────────
