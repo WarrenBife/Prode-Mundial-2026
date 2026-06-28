@@ -1975,6 +1975,11 @@ function renderAdminPanel() {
     html += `</div>`;
   } else {
     html += `<div class="asec">
+      <div class="asec-title">Clasificados automáticos</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Regenera los 16 partidos del R32 usando el bracket real FIFA 2026 y los resultados de grupos.</div>
+      <button class="btn btn-primary" onclick="autoFillKnockoutSlots()" style="margin-bottom:0">⚡ Regenerar R32 automáticamente</button>
+    </div>`;
+    html += `<div class="asec">
       <div class="asec-title">Equipos clasificados — Rellená los partidos</div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Usá los códigos de 3 letras (ARG, BRA…) o el nombre que quieras.</div>`;
     ALL_KO_IDS.forEach(id => {
