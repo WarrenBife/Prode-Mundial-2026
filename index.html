@@ -329,6 +329,33 @@
   .notif-btn{width:100%;margin-top:16px;background:linear-gradient(180deg,#f5c842,#e6a800);color:#000;border:none;border-radius:999px;padding:13px;font-size:15px;font-weight:700;font-family:'DM Sans',sans-serif;cursor:pointer;letter-spacing:.3px;}
   .notif-btn:hover{filter:brightness(1.08);}
 
+  /* SUB-TABS PARTIDOS */
+  .part-sub-tabs{display:flex;gap:4px;margin-bottom:14px;}
+  .part-sub-tab{flex:1;padding:9px 4px;border:1px solid var(--border);background:transparent;color:var(--text-dim);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;cursor:pointer;border-radius:10px;transition:all .2s var(--ease);}
+  .part-sub-tab.active{background:rgba(245,200,66,.08);border-color:rgba(245,200,66,.5);color:var(--gold);}
+  .part-sub-tab:hover:not(.active){color:var(--text);border-color:var(--text-dim);}
+  /* BRACKET */
+  .bracket-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:12px;}
+  .bracket-body{display:flex;align-items:flex-start;gap:8px;min-width:max-content;}
+  .bk-col{display:flex;flex-direction:column;width:128px;}
+  .bk-col-hdr{font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:2px;color:var(--blue);text-align:center;padding:6px 4px 8px;white-space:nowrap;}
+  .bk-matches{display:flex;flex-direction:column;justify-content:space-around;flex:1;}
+  .bk-m{background:var(--surface);border:1px solid var(--border);border-radius:9px;overflow:hidden;box-shadow:var(--shadow-card);flex-shrink:0;}
+  .bk-m.has-result{border-color:rgba(245,200,66,.35);}
+  .bk-team{display:flex;align-items:center;gap:4px;padding:6px 8px;font-size:11px;}
+  .bk-team:not(:last-of-type){border-bottom:1px solid var(--border);}
+  .bk-flag{font-size:14px;flex-shrink:0;}
+  .bk-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-muted);}
+  .bk-score{font-family:'Bebas Neue',sans-serif;font-size:14px;color:var(--text-dim);min-width:14px;text-align:right;flex-shrink:0;}
+  .bk-team.bk-win .bk-name{color:var(--text);font-weight:600;}
+  .bk-team.bk-win .bk-score{color:var(--gold);}
+  .bk-team.bk-lose{opacity:.38;}
+  .bk-tbd{padding:8px;font-size:9px;color:var(--text-dim);text-align:center;font-style:italic;}
+  .bk-third{margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);display:flex;flex-direction:column;align-items:center;gap:6px;}
+  .bk-third-lbl{font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:2px;color:var(--text-dim);}
+  .bk-empty{text-align:center;padding:36px 16px;color:var(--text-dim);}
+  .bk-empty .ico{font-size:34px;margin-bottom:10px;}
+
   @media(max-width:380px){.tname{font-size:11px;}.si{width:32px;height:32px;font-size:16px;}.rp-grid{grid-template-columns:1fr 1fr;}}
   @media (prefers-reduced-motion: reduce){
     *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important;}
@@ -719,6 +746,7 @@ let adminKoWinners = {};
 const _wc_start   = new Date(2026, 5, 11); // June 11 2026 local time
 let dayDate       = new Date() < _wc_start ? new Date(2026, 5, 11) : new Date();
 let dayMatchesData = [];
+let partidosView = 'dia';
 
 // ── INIT ─────────────────────────────────────────────────
 window.addEventListener('load', () => {
@@ -1436,6 +1464,76 @@ function renderResultados() {
 }
 
 // ── PESTAÑA PARTIDOS ─────────────────────────────────────
+function switchPartidosView(v) {
+  partidosView = v;
+  renderPartidos();
+}
+
+function buildBracketHtml() {
+  const slots   = roomData?.knockoutSlots || {};
+  const results = roomData?.results || {};
+
+  if (!Object.keys(slots).length) {
+    return '<div class="bk-empty"><div class="ico">🏆</div>El bracket estará disponible cuando terminen los grupos y se definan los clasificados.</div>';
+  }
+
+  const brMatch = (id) => {
+    const slot = slots[id];
+    if (!slot) return `<div class="bk-m"><div class="bk-tbd">Por definir</div></div>`;
+    const t1 = TI[slot.home] || { f:'🏳️', n: slot.home };
+    const t2 = TI[slot.away] || { f:'🏳️', n: slot.away };
+    const res = results[id];
+    const hasRes = res !== undefined && res.h !== undefined;
+    let cls1 = 'bk-team', cls2 = 'bk-team';
+    if (hasRes) {
+      if (res.winner) {
+        cls1 += res.winner === slot.home ? ' bk-win' : ' bk-lose';
+        cls2 += res.winner === slot.away ? ' bk-win' : ' bk-lose';
+      } else {
+        const rh = parseInt(res.h), ra = parseInt(res.a);
+        if (!isNaN(rh) && !isNaN(ra) && rh !== ra) {
+          cls1 += rh > ra ? ' bk-win' : ' bk-lose';
+          cls2 += ra > rh ? ' bk-win' : ' bk-lose';
+        }
+      }
+    }
+    return `<div class="bk-m${hasRes?' has-result':''}">
+      <div class="${cls1}"><span class="bk-flag">${t1.f}</span><span class="bk-name">${t1.n}</span><span class="bk-score">${hasRes?res.h:''}</span></div>
+      <div class="${cls2}"><span class="bk-flag">${t2.f}</span><span class="bk-name">${t2.n}</span><span class="bk-score">${hasRes?res.a:''}</span></div>
+    </div>`;
+  };
+
+  const ROUNDS = [
+    { label:'RONDA 32', ids: Array.from({length:16},(_,i)=>`R32_${i+1}`) },
+    { label:'OCTAVOS',  ids: Array.from({length:8}, (_,i)=>`R16_${i+1}`) },
+    { label:'CUARTOS',  ids: Array.from({length:4}, (_,i)=>`QF_${i+1}`)  },
+    { label:'SEMIS',    ids: ['SF_1','SF_2'] },
+    { label:'FINAL',    ids: ['F'] },
+  ].filter(r => r.ids.some(id => slots[id]));
+
+  if (!ROUNDS.length) {
+    return '<div class="bk-empty"><div class="ico">⏳</div>Los equipos del bracket aún no fueron definidos.</div>';
+  }
+
+  const firstCount = ROUNDS[0].ids.filter(id => slots[id]).length;
+  const MATCH_H = 62, GAP = 8;
+  const totalH  = firstCount * (MATCH_H + GAP);
+
+  const cols = ROUNDS.map(round => {
+    const vis = round.ids.filter(id => slots[id]);
+    return `<div class="bk-col">
+      <div class="bk-col-hdr">${round.label}</div>
+      <div class="bk-matches" style="height:${totalH}px">${vis.map(id => brMatch(id)).join('')}</div>
+    </div>`;
+  }).join('');
+
+  const tppHtml = slots['TPP']
+    ? `<div class="bk-third"><div class="bk-third-lbl">3ER PUESTO</div>${brMatch('TPP')}</div>`
+    : '';
+
+  return `<div class="bracket-wrap"><div class="bracket-body">${cols}</div>${tppHtml}</div>`;
+}
+
 function startLivePolling() {
   fetchAndRenderDay();
   if (liveInterval) clearInterval(liveInterval);
@@ -1656,12 +1754,22 @@ function renderPartidos() {
   const el = document.getElementById('partidos-content');
   if (!el) return;
 
+  const subTabs = `<div class="part-sub-tabs">
+    <button class="part-sub-tab${partidosView==='dia'?' active':''}" onclick="switchPartidosView('dia')">POR DÍA</button>
+    <button class="part-sub-tab${partidosView==='bracket'?' active':''}" onclick="switchPartidosView('bracket')">LLAVES</button>
+  </div>`;
+
+  if (partidosView === 'bracket') {
+    el.innerHTML = subTabs + buildBracketHtml();
+    return;
+  }
+
   // Preservar qué desplegables de prode estaban abiertos antes del re-render
   const openPreds = new Set(
     Array.from(el.querySelectorAll('details.preds-box[open]')).map(d => d.dataset.mid)
   );
 
-  let html = '';
+  let html = subTabs;
 
   // ── HERO: próximo partido + lo que juega la sala ──
   const next = getNextMatch();
