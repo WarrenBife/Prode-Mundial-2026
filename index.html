@@ -1535,7 +1535,7 @@ async function fetchAndRenderDay() {
   );
 
   // Try ESPN for live/final scores (no auth, CORS-friendly)
-  let espnMap = {};
+  let espnMap = {}, rawEspnEvents = [];
   try {
     const y  = dayDate.getFullYear();
     const mo = String(dayDate.getMonth() + 1).padStart(2, '0');
@@ -1549,7 +1549,8 @@ async function fetchAndRenderDay() {
     clearTimeout(tid);
     if (res.ok) {
       const data = await res.json();
-      (data.events || []).forEach(evt => {
+      rawEspnEvents = data.events || [];
+      rawEspnEvents.forEach(evt => {
         const comp   = evt.competitions?.[0];
         if (!comp) return;
         const homeC  = comp.competitors?.find(c => c.homeAway === 'home');
@@ -1595,6 +1596,35 @@ async function fetchAndRenderDay() {
       fbResult,
     };
   });
+
+  // Fase eliminatoria: si no hay partidos de grupos, usar eventos ESPN directamente
+  if (dayMatchesData.length === 0 && rawEspnEvents.length > 0) {
+    const slots = roomData?.knockoutSlots || {};
+    rawEspnEvents.forEach(evt => {
+      const comp  = evt.competitions?.[0];
+      if (!comp) return;
+      const homeC = comp.competitors?.find(c => c.homeAway === 'home');
+      const awayC = comp.competitors?.find(c => c.homeAway === 'away');
+      if (!homeC || !awayC) return;
+      const homeAbbr = homeC.team?.abbreviation?.toUpperCase();
+      const awayAbbr = awayC.team?.abbreviation?.toUpperCase();
+      if (!homeAbbr || !awayAbbr) return;
+      let matchId = null;
+      for (const [id, slot] of Object.entries(slots)) {
+        if ((slot.home === homeAbbr && slot.away === awayAbbr) ||
+            (slot.home === awayAbbr && slot.away === homeAbbr)) {
+          matchId = id; break;
+        }
+      }
+      const fbResult = (matchId && results[matchId]) ? results[matchId] : null;
+      dayMatchesData.push({
+        home: homeAbbr, away: awayAbbr, utcDate: evt.date || '',
+        matchId, flipped: false,
+        liveData: espnMap[`${homeAbbr}-${awayAbbr}`] || null,
+        fbResult,
+      });
+    });
+  }
 
   // Auto-guardar resultados finalizados en Firestore
   if (currentRoom && roomData) {
@@ -1731,6 +1761,21 @@ function renderPartidos() {
       <div class="nh-when">${when}</div>
       ${preds ? `<div class="room-preds"><div class="rp-title">Lo que juega la sala</div>${preds}</div>` : ''}
     </div>`;
+  } else {
+    const phase = roomData?.phase || '';
+    if (phase === 'finished') {
+      html += `<div class="next-hero" style="text-align:center;padding:18px 16px;">
+        <div class="nh-label">🏆 Torneo finalizado</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:6px;">¡Gracias por jugar! Revisá la tabla final.</div>
+      </div>`;
+    } else if (phase.startsWith('knockout')) {
+      const slots = roomData?.knockoutSlots || {};
+      const slotCount = Object.keys(slots).length;
+      html += `<div class="next-hero" style="text-align:center;padding:18px 16px;">
+        <div class="nh-label">⚡ Fase Eliminatoria en curso</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:6px;">${slotCount} partido${slotCount!==1?'s':''} en el bracket · Navegá por día para ver los resultados en vivo.</div>
+      </div>`;
+    }
   }
 
   html += `
