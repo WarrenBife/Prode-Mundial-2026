@@ -1928,25 +1928,42 @@ function calcQualifiers(results) {
   };
 }
 
-// Bracket R32: grupos adyacentes se cruzan
-const GROUP_PAIRS = [['A','B'],['C','D'],['E','F'],['G','H'],['I','J'],['K','L']];
-
+// Bracket R32 oficial FIFA 2026
+// C↔F y H↔J cruzan 1º vs 2º; A-B/D-G/E-I/K-L subcampeones entre sí;
+// campeones de A,B,D,E,G,I,K,L enfrentan terceros de E,J,B,D,I,F,L,K
 async function autoFillKnockoutSlots() {
   const results = roomData?.results || {};
   const q = calcQualifiers(results);
+  const f  = g => q.firsts.find(t => t.group === g)?.team;
+  const s  = g => q.seconds.find(t => t.group === g)?.team;
+  const tg = {}; q.thirds.forEach(t => { tg[t.group] = t.team; });
+
+  const slots = {
+    // 1º vs 2º (grupos C↔F y H↔J)
+    R32_1:  f('C') && s('F') ? { home: f('C'), away: s('F') } : null, // 1C vs 2F
+    R32_2:  f('F') && s('C') ? { home: f('F'), away: s('C') } : null, // 1F vs 2C
+    R32_3:  f('H') && s('J') ? { home: f('H'), away: s('J') } : null, // 1H vs 2J
+    R32_4:  f('J') && s('H') ? { home: f('J'), away: s('H') } : null, // 1J vs 2H
+    // 2º vs 2º (A-B, D-G, E-I, K-L)
+    R32_5:  s('A') && s('B') ? { home: s('A'), away: s('B') } : null, // 2A vs 2B
+    R32_6:  s('D') && s('G') ? { home: s('D'), away: s('G') } : null, // 2D vs 2G
+    R32_7:  s('E') && s('I') ? { home: s('E'), away: s('I') } : null, // 2E vs 2I
+    R32_8:  s('K') && s('L') ? { home: s('K'), away: s('L') } : null, // 2K vs 2L
+    // 1º vs 3º
+    R32_9:  f('A') && tg['E'] ? { home: f('A'), away: tg['E'] } : null, // 1A vs 3E
+    R32_10: f('B') && tg['J'] ? { home: f('B'), away: tg['J'] } : null, // 1B vs 3J
+    R32_11: f('D') && tg['B'] ? { home: f('D'), away: tg['B'] } : null, // 1D vs 3B
+    R32_12: f('E') && tg['D'] ? { home: f('E'), away: tg['D'] } : null, // 1E vs 3D
+    R32_13: f('G') && tg['I'] ? { home: f('G'), away: tg['I'] } : null, // 1G vs 3I
+    R32_14: f('I') && tg['F'] ? { home: f('I'), away: tg['F'] } : null, // 1I vs 3F
+    R32_15: f('K') && tg['L'] ? { home: f('K'), away: tg['L'] } : null, // 1K vs 3L
+    R32_16: f('L') && tg['K'] ? { home: f('L'), away: tg['K'] } : null, // 1L vs 3K
+  };
+
   const updates = {};
-  GROUP_PAIRS.forEach(([g1, g2], i) => {
-    const h1 = q.firsts.find(t => t.group===g1)?.team;
-    const a1 = q.seconds.find(t => t.group===g2)?.team;
-    const h2 = q.firsts.find(t => t.group===g2)?.team;
-    const a2 = q.seconds.find(t => t.group===g1)?.team;
-    if (h1 && a1) updates[`knockoutSlots.R32_${i*2+1}`] = { home: h1, away: a1 };
-    if (h2 && a2) updates[`knockoutSlots.R32_${i*2+2}`] = { home: h2, away: a2 };
+  Object.entries(slots).forEach(([id, val]) => {
+    if (val) updates[`knockoutSlots.${id}`] = val;
   });
-  for (let i = 0; i < 4; i++) {
-    const t1 = q.thirds[i], t2 = q.thirds[7-i];
-    if (t1 && t2) updates[`knockoutSlots.R32_${13+i}`] = { home: t1.team, away: t2.team };
-  }
   if (!Object.keys(updates).length) { toast('No hay resultados suficientes'); return; }
   await db.collection('prode_rooms').doc(currentRoom).update(updates);
   toast(`✓ ${Object.keys(updates).length} partidos del R32 generados`);
