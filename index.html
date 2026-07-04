@@ -939,6 +939,7 @@ function connectToRoom() {
     document.getElementById('app').style.display = 'block';
     renderHeader();
     renderPanel(getActiveTab());
+    setTimeout(showMufa, 1200);
   });
   // Auto-sync de resultados cada 5 minutos
   syncResults();
@@ -2388,6 +2389,45 @@ function toast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg; el.classList.add('show');
   clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 2500);
+}
+</script>
+<!-- POPUP MUFA -->
+<div id="mufa-overlay" class="notif-overlay" style="display:none" onclick="closeMufa()">
+  <div class="notif-modal" onclick="event.stopPropagation()" style="text-align:center;max-width:320px;">
+    <div style="font-size:52px;margin-bottom:6px;">🏆</div>
+    <div class="notif-title" style="font-size:22px;line-height:1.2;margin-bottom:8px;" id="mufa-title"></div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px;">por dar cátedra y ganar el Prode</div>
+    <div style="font-size:11px;color:var(--text-dim);margin-bottom:20px;font-style:italic;">⚠️ Esto es solo una mufa. El torneo no terminó.</div>
+    <button class="notif-btn" onclick="closeMufa()">Gracias, lo sé 😎</button>
+  </div>
+</div>
+
+<script>
+let _mufaShown = false;
+function showMufa() {
+  if (_mufaShown || !roomData || !playersData) return;
+  const results = roomData.results || {};
+  if (!Object.keys(results).length) return;
+  const slots = roomData.knockoutSlots || {};
+  const actualQ = calcQualifiers(results);
+  const rows = Object.values(playersData).map(p => {
+    let pts = 0;
+    Object.keys(results).forEach(mid => {
+      const pred = (p.predictions || {})[mid];
+      if (!pred || pred.h === '' || pred.h === undefined) return;
+      pts += isKOMatch(mid) ? calcKoPts(pred, results[mid]).total : calcPts(pred, results[mid]);
+    });
+    if (actualQ) { const pq = calcQualifiers(p.predictions||{}); pq.all.forEach(t => { if(actualQ.all.has(t)) pts++; }); }
+    return { name: p.name, pts };
+  }).sort((a,b) => b.pts - a.pts);
+  if (!rows.length) return;
+  const leader = rows[0];
+  document.getElementById('mufa-title').textContent = `¡Felicidades ${leader.name}!`;
+  document.getElementById('mufa-overlay').style.display = 'flex';
+  _mufaShown = true;
+}
+function closeMufa() {
+  document.getElementById('mufa-overlay').style.display = 'none';
 }
 </script>
 </body>
