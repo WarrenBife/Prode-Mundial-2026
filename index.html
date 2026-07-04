@@ -2160,7 +2160,32 @@ function renderAdminPanel() {
     finished:       '🏆 Torneo finalizado',
   };
 
-  let html = `
+  // Warning: partidos KO empatados sin winner seteado
+  const missingWinner = ALL_KO_IDS.filter(id => {
+    const res = results[id];
+    if (!res || res.h === undefined) return false;
+    return parseInt(res.h) === parseInt(res.a) && !res.winner;
+  });
+  let html = '';
+  if (missingWinner.length) {
+    html += `<div style="background:rgba(229,72,77,.1);border:1px solid rgba(229,72,77,.4);border-radius:12px;padding:12px 14px;margin-bottom:14px;">
+      <div style="font-weight:700;color:#f0605a;font-size:13px;margin-bottom:6px;">⚠️ Partidos empatados sin clasificado definido</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Los jugadores no reciben el punto de "quién pasa" hasta que definas el clasificado. Andá a la sección de resultados y hacé click en el equipo que pasó.</div>
+      ${missingWinner.map(id => {
+        const s = slots[id] || {};
+        const t1 = TI[s.home]||{f:'',n:s.home}, t2 = TI[s.away]||{f:'',n:s.away};
+        const res = results[id];
+        return `<div style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;">
+          <span style="color:#f0605a;font-weight:600">${id}</span>
+          <span>${t1.f}${t1.n} ${res?.h}-${res?.a} ${t2.f}${t2.n}</span>
+          <button style="margin-left:auto;background:rgba(229,72,77,.15);border:1px solid rgba(229,72,77,.4);color:#f0605a;border-radius:7px;padding:3px 10px;font-size:11px;cursor:pointer;" onclick="setAdminKoWinner('${id}','${s.home}')">${t1.f} Pasa</button>
+          <button style="background:rgba(229,72,77,.15);border:1px solid rgba(229,72,77,.4);color:#f0605a;border-radius:7px;padding:3px 10px;font-size:11px;cursor:pointer;" onclick="setAdminKoWinner('${id}','${s.away}')">${t2.f} Pasa</button>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  html += `
   <div class="asec">
     <div class="asec-title">Estado del torneo</div>
     <div class="phase-grid">`;
@@ -2270,6 +2295,13 @@ function setAdminKoWinner(id, team) {
   const btnA = document.getElementById(`kadm_a_${id}`);
   if (btnH) btnH.classList.toggle('kow-sel', team === slot.home);
   if (btnA) btnA.classList.toggle('kow-sel', team === slot.away);
+  // Auto-guardar si el resultado ya existe en Firestore
+  const res = roomData?.results?.[id];
+  if (res && res.h !== undefined) {
+    db.collection('prode_rooms').doc(currentRoom).update({
+      [`results.${id}`]: { h: res.h, a: res.a, winner: team }
+    }).then(() => toast(`✓ Clasificado guardado: ${(TI[team]||{n:team}).n}`));
+  }
 }
 
 async function saveResult(matchId) {
