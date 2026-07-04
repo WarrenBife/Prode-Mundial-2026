@@ -1013,6 +1013,18 @@ async function syncResults() {
     });
   }));
 
+  // Retroactivamente corregir winner en resultados KO sin ese campo
+  const slots2 = roomData.knockoutSlots || {};
+  Object.entries(roomData.results || {}).forEach(([id, res]) => {
+    if (!isKOMatch(id)) return;
+    if (res.winner) return; // ya tiene winner
+    const slot = slots2[id];
+    if (!slot) return;
+    const rh = parseInt(res.h), ra = parseInt(res.a);
+    if (isNaN(rh) || isNaN(ra) || rh === ra) return;
+    updates[`results.${id}`] = { h: rh, a: ra, winner: rh > ra ? slot.home : slot.away };
+  });
+
   if (Object.keys(updates).length > 0) {
     await db.collection('prode_rooms').doc(currentRoom).update(updates);
     toast(`✓ ${Object.keys(updates).length} resultado(s) sincronizado(s)`);
