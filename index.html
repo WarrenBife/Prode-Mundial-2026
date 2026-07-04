@@ -336,21 +336,20 @@
   .part-sub-tab:hover:not(.active){color:var(--text);border-color:var(--text-dim);}
   /* BRACKET */
   .bracket-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:12px;}
-  .bracket-body{display:flex;align-items:flex-start;gap:8px;min-width:max-content;}
-  .bk-col{display:flex;flex-direction:column;width:128px;}
-  .bk-col-hdr{font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:2px;color:var(--blue);text-align:center;padding:6px 4px 8px;white-space:nowrap;}
-  .bk-matches{display:flex;flex-direction:column;justify-content:space-around;flex:1;}
-  .bk-m{background:var(--surface);border:1px solid var(--border);border-radius:9px;overflow:hidden;box-shadow:var(--shadow-card);flex-shrink:0;}
+  .bracket-body{display:flex;align-items:flex-start;gap:0;min-width:max-content;}
+  .bk-col-wrap{display:flex;flex-direction:column;flex-shrink:0;}
+  .bk-col-hdr{height:24px;font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:2px;color:var(--blue);text-align:center;white-space:nowrap;display:flex;align-items:center;justify-content:center;}
+  .bk-m{background:var(--surface);border:1px solid var(--border);border-radius:9px;overflow:hidden;box-shadow:var(--shadow-card);height:54px;display:flex;flex-direction:column;}
   .bk-m.has-result{border-color:rgba(245,200,66,.35);}
-  .bk-team{display:flex;align-items:center;gap:4px;padding:6px 8px;font-size:11px;}
+  .bk-team{display:flex;align-items:center;gap:4px;padding:4px 8px;font-size:11px;flex:1;min-height:0;}
   .bk-team:not(:last-of-type){border-bottom:1px solid var(--border);}
-  .bk-flag{font-size:14px;flex-shrink:0;}
+  .bk-flag{font-size:13px;flex-shrink:0;}
   .bk-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-muted);}
   .bk-score{font-family:'Bebas Neue',sans-serif;font-size:14px;color:var(--text-dim);min-width:14px;text-align:right;flex-shrink:0;}
   .bk-team.bk-win .bk-name{color:var(--text);font-weight:600;}
   .bk-team.bk-win .bk-score{color:var(--gold);}
   .bk-team.bk-lose{opacity:.38;}
-  .bk-tbd{padding:8px;font-size:9px;color:var(--text-dim);text-align:center;font-style:italic;}
+  .bk-tbd{display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text-dim);font-style:italic;height:100%;}
   .bk-third{margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);display:flex;flex-direction:column;align-items:center;gap:6px;}
   .bk-third-lbl{font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:2px;color:var(--text-dim);}
   .bk-empty{text-align:center;padding:36px 16px;color:var(--text-dim);}
@@ -2007,6 +2006,26 @@ async function autoFillKnockoutSlots() {
   toast(`✓ ${Object.keys(updates).length} partidos del R32 generados`);
 }
 
+async function autoFillR16Slots() {
+  const results = roomData?.results || {};
+  const w = id => results[id]?.winner;
+  const pairs = [
+    ['R32_1','R32_2'],['R32_3','R32_4'],['R32_5','R32_6'],['R32_7','R32_8'],
+    ['R32_9','R32_10'],['R32_11','R32_12'],['R32_13','R32_14'],['R32_15','R32_16'],
+  ];
+  const updates = {};
+  let missing = 0;
+  pairs.forEach(([a, b], i) => {
+    const ha = w(a), hb = w(b);
+    if (ha && hb) updates[`knockoutSlots.R16_${i+1}`] = { home: ha, away: hb };
+    else missing++;
+  });
+  if (!Object.keys(updates).length) { toast('Faltan resultados del R32'); return; }
+  if (missing) toast(`⚠️ Faltan ganadores en ${missing} partidos del R32`);
+  await db.collection('prode_rooms').doc(currentRoom).update(updates);
+  toast(`✓ ${Object.keys(updates).length} partidos de Octavos generados`);
+}
+
 // ── ADMIN ────────────────────────────────────────────────
 function showAdminLogin() {
   if (isAdmin) { openAdminPanel(); return; }
@@ -2084,10 +2103,13 @@ function renderAdminPanel() {
     }
     html += `</div>`;
   } else {
+    const r32Winners = Array.from({length:16},(_,i)=>`R32_${i+1}`).filter(id => results[id]?.winner).length;
     html += `<div class="asec">
       <div class="asec-title">Clasificados automáticos</div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Regenera los 16 partidos del R32 usando el bracket real FIFA 2026 y los resultados de grupos.</div>
-      <button class="btn btn-primary" onclick="autoFillKnockoutSlots()" style="margin-bottom:0">⚡ Regenerar R32 automáticamente</button>
+      <button class="btn btn-primary" onclick="autoFillKnockoutSlots()" style="margin-bottom:8px">⚡ Regenerar R32 automáticamente</button>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;margin-top:6px;">Genera los 8 Octavos de Final desde los ganadores del R32 (${r32Winners}/16 disponibles).</div>
+      <button class="btn btn-primary" onclick="autoFillR16Slots()" style="margin-bottom:0" ${r32Winners===0?'disabled':''}>⚡ Generar Octavos automáticamente</button>
     </div>`;
     html += `<div class="asec">
       <div class="asec-title">Equipos clasificados — Rellená los partidos</div>
