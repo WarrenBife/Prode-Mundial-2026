@@ -918,7 +918,7 @@ function connectToRoom() {
     roomData = snap.data();
     renderHeader();
     const active = getActiveTab();
-    if (active !== 'predict') renderPanel(active);
+    renderPanel(active);
     if (document.getElementById('adm-panel').classList.contains('active')) renderAdminPanel();
   });
   unsubPlayers = db.collection('prode_rooms').doc(currentRoom).collection('players').onSnapshot(snap => {
