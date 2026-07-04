@@ -2057,6 +2057,31 @@ async function autoFillKnockoutSlots() {
   toast(`✓ ${Object.keys(updates).length} partidos del R32 generados`);
 }
 
+async function fixPlayerKoWinners() {
+  const slots = roomData?.knockoutSlots || {};
+  const batch = [];
+  Object.entries(playersData).forEach(([pid, p]) => {
+    const preds = p.predictions || {};
+    const updates = {};
+    ALL_KO_IDS.forEach(id => {
+      const pred = preds[id];
+      if (!pred) return;
+      const slot = slots[id];
+      if (!slot) return;
+      const ph = parseInt(pred.h), pa = parseInt(pred.a);
+      if (isNaN(ph) || isNaN(pa) || ph === pa) return;
+      const expected = ph > pa ? slot.home : slot.away;
+      if (pred.winner !== expected) updates[`predictions.${id}.winner`] = expected;
+    });
+    if (Object.keys(updates).length) batch.push({ pid, updates });
+  });
+  if (!batch.length) { toast('Sin predicciones para corregir'); return; }
+  await Promise.all(batch.map(({ pid, updates }) =>
+    db.collection('prode_rooms').doc(currentRoom).collection('players').doc(pid).update(updates)
+  ));
+  toast(`✓ Winners corregidos en ${batch.length} jugador(es)`);
+}
+
 async function loadRealR16Slots() {
   const slots = {
     R16_1: { home: 'CAN', away: 'MAR' }, // 4 jul
@@ -2172,6 +2197,11 @@ function renderAdminPanel() {
     html += `</div>`;
   } else {
     const r32Winners = Array.from({length:16},(_,i)=>`R32_${i+1}`).filter(id => results[id]?.winner).length;
+    html += `<div class="asec">
+      <div class="asec-title">Corregir predicciones</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Si algún jugador predijo un resultado pero no le tomó el clasificado automáticamente, esto lo corrige para todos.</div>
+      <button class="btn btn-primary" onclick="fixPlayerKoWinners()" style="margin-bottom:0">🔧 Corregir winners de predicciones KO</button>
+    </div>`;
     html += `<div class="asec">
       <div class="asec-title">Clasificados automáticos</div>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Regenera los 16 partidos del R32 usando el bracket real FIFA 2026 y los resultados de grupos.</div>
