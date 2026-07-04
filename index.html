@@ -334,6 +334,12 @@
   .part-sub-tab{flex:1;padding:9px 4px;border:1px solid var(--border);background:transparent;color:var(--text-dim);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;cursor:pointer;border-radius:10px;transition:all .2s var(--ease);}
   .part-sub-tab.active{background:rgba(245,200,66,.08);border-color:rgba(245,200,66,.5);color:var(--gold);}
   .part-sub-tab:hover:not(.active){color:var(--text);border-color:var(--text-dim);}
+  .ko-phase-nav{display:flex;gap:4px;margin-bottom:16px;}
+  .ko-phase-btn{flex:1;padding:9px 4px;border:1px solid var(--border);background:transparent;color:var(--text-dim);font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;cursor:pointer;border-radius:10px;transition:all .2s var(--ease);}
+  .ko-phase-btn.active{background:rgba(79,142,247,.1);border-color:rgba(79,142,247,.5);color:var(--blue);}
+  .ko-phase-btn:hover:not(.active){color:var(--text);border-color:var(--text-dim);}
+  .ko-locked-banner{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--text-dim);}
+
   /* BRACKET */
   .bracket-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:12px;}
   .bracket-body{display:flex;align-items:flex-start;gap:0;min-width:max-content;}
@@ -746,6 +752,7 @@ const _wc_start   = new Date(2026, 5, 11); // June 11 2026 local time
 let dayDate       = new Date() < _wc_start ? new Date(2026, 5, 11) : new Date();
 let dayMatchesData = [];
 let partidosView = 'dia';
+let koRoundView  = null;
 
 // ── INIT ─────────────────────────────────────────────────
 window.addEventListener('load', () => {
@@ -1140,17 +1147,45 @@ function renderPredict() {
       el.innerHTML = '<div class="tbd-box">⏳ El admin todavía está completando los equipos clasificados. ¡Volvé pronto!</div>';
       return;
     }
+
+    // Rondas disponibles (con slots cargados)
+    const KO_PHASE_ROUNDS = [
+      { key:'R32', short:'16vos', ids: Array.from({length:16},(_,i)=>`R32_${i+1}`), locked: true  },
+      { key:'R16', short:'8vos',  ids: Array.from({length:8}, (_,i)=>`R16_${i+1}`), locked: false },
+      { key:'QF',  short:'Cuartos', ids: Array.from({length:4},(_,i)=>`QF_${i+1}`), locked: false },
+      { key:'SF',  short:'Semis', ids: ['SF_1','SF_2'],                              locked: false },
+      { key:'F',   short:'Final', ids: ['F'],                                        locked: false },
+    ];
+    const available = KO_PHASE_ROUNDS.filter(r => r.ids.some(id => slots[id]));
+
+    // Default: primera ronda no-bloqueada, o la primera disponible
+    if (!koRoundView || !available.find(r => r.key === koRoundView))
+      koRoundView = (available.find(r => !r.locked) || available[0])?.key || null;
+
+    const cur = available.find(r => r.key === koRoundView) || available[0];
+
     let html = renderPodiumCard(slots, isOpen);
-    KO_ROUNDS.forEach(({ label, ids }) => {
-      const visibles = ids.filter(id => slots[id]);
-      if (!visibles.length) return;
-      html += `<div class="round-section"><div class="round-title">${label}</div>`;
-      visibles.forEach(id => {
-        const s = slots[id];
-        html += matchCard({ id, home: s.home, away: s.away }, isOpen);
+
+    // Nav de rondas (solo si hay más de una)
+    if (available.length > 1) {
+      html += `<div class="ko-phase-nav">`;
+      available.forEach(r => {
+        html += `<button class="ko-phase-btn${koRoundView===r.key?' active':''}" onclick="switchKoView('${r.key}')">${r.short}</button>`;
       });
       html += `</div>`;
-    });
+    }
+
+    // Contenido de la ronda seleccionada
+    if (cur) {
+      const roundOpen = isOpen && !cur.locked;
+      const visibles  = cur.ids.filter(id => slots[id]);
+      if (cur.locked)
+        html += `<div class="ko-locked-banner">🔒 Esta fase está cerrada — podés ver tus predicciones pero ya no podés modificarlas.</div>`;
+      visibles.forEach(id => {
+        html += matchCard({ id, home: slots[id].home, away: slots[id].away }, roundOpen);
+      });
+    }
+
     el.innerHTML = html || '<div class="tbd-box">⏳ El admin todavía está cargando los partidos.</div>';
   }
 }
@@ -1474,6 +1509,11 @@ function renderResultados() {
 }
 
 // ── PESTAÑA PARTIDOS ─────────────────────────────────────
+function switchKoView(key) {
+  koRoundView = key;
+  renderPredict();
+}
+
 function switchPartidosView(v) {
   partidosView = v;
   renderPartidos();
