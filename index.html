@@ -1091,7 +1091,7 @@ function renderPredict() {
   if (!roomData) return;
   const phase  = roomData.phase || 'groups_open';
   const isOpen = phase === 'groups_open' || phase === 'knockout_open';
-  const podiumOpen = isOpen && !roomData?.podiumLocked;
+  const podiumOpen = false;
 
   if (phase === 'finished') {
     el.innerHTML = '<div class="empty"><div class="ico">🏆</div>El torneo ha finalizado. ¡Gracias por jugar!</div>';
