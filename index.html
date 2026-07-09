@@ -1091,6 +1091,7 @@ function renderPredict() {
   if (!roomData) return;
   const phase  = roomData.phase || 'groups_open';
   const isOpen = phase === 'groups_open' || phase === 'knockout_open';
+  const podiumOpen = isOpen && !roomData?.podiumLocked;
 
   if (phase === 'finished') {
     el.innerHTML = '<div class="empty"><div class="ico">🏆</div>El torneo ha finalizado. ¡Gracias por jugar!</div>';
@@ -1152,7 +1153,7 @@ function renderPredict() {
     // Rondas disponibles (con slots cargados)
     const KO_PHASE_ROUNDS = [
       { key:'R32', short:'16vos', ids: Array.from({length:16},(_,i)=>`R32_${i+1}`), locked: true  },
-      { key:'R16', short:'8vos',  ids: Array.from({length:8}, (_,i)=>`R16_${i+1}`), locked: false },
+      { key:'R16', short:'8vos',  ids: Array.from({length:8}, (_,i)=>`R16_${i+1}`), locked: true  },
       { key:'QF',  short:'Cuartos', ids: Array.from({length:4},(_,i)=>`QF_${i+1}`), locked: false },
       { key:'SF',  short:'Semis', ids: ['SF_1','SF_2'],                              locked: false },
       { key:'F',   short:'Final', ids: ['F'],                                        locked: false },
@@ -1165,7 +1166,7 @@ function renderPredict() {
 
     const cur = available.find(r => r.key === koRoundView) || available[0];
 
-    let html = renderPodiumCard(slots, isOpen);
+    let html = renderPodiumCard(slots, podiumOpen);
 
     // Nav de rondas (solo si hay más de una)
     if (available.length > 1) {
@@ -1379,6 +1380,7 @@ function renderPodiumCard(slots, isOpen) {
 const podiumTimers = {};
 function setPodium(slot, team) {
   if (roomData?.phase !== 'knockout_open') return;
+  if (roomData?.podiumLocked) return;
   myPreds[`pod_${slot}`] = team;
   clearTimeout(podiumTimers[slot]);
   podiumTimers[slot] = setTimeout(() => {
@@ -2120,6 +2122,38 @@ async function autoFillR16Slots() {
   toast(`✓ ${Object.keys(updates).length} partidos de Octavos generados`);
 }
 
+async function autoFillQFSlots() {
+  const results = roomData?.results || {};
+  const w = id => results[id]?.winner;
+  const pairs = [
+    ['R16_1','R16_2'],['R16_3','R16_4'],['R16_5','R16_6'],['R16_7','R16_8'],
+  ];
+  const updates = {};
+  let missing = 0;
+  pairs.forEach(([a, b], i) => {
+    const ha = w(a), hb = w(b);
+    if (ha && hb) updates[`knockoutSlots.QF_${i+1}`] = { home: ha, away: hb };
+    else missing++;
+  });
+  if (!Object.keys(updates).length) { toast('Faltan resultados de Octavos'); return; }
+  if (missing) toast(`⚠️ Faltan ganadores en ${missing} partido(s) de Octavos`);
+  await db.collection('prode_rooms').doc(currentRoom).update(updates);
+  toast(`✓ ${Object.keys(updates).length} partidos de Cuartos generados`);
+}
+
+async function loadRealQFSlots() {
+  const slots = {
+    QF_1: { home: 'FRA', away: 'MAR' },
+    QF_2: { home: 'ESP', away: 'BEL' },
+    QF_3: { home: 'ENG', away: 'NOR' },
+    QF_4: { home: 'ARG', away: 'SUI' },
+  };
+  const updates = {};
+  Object.entries(slots).forEach(([id, val]) => { updates[`knockoutSlots.${id}`] = val; });
+  await db.collection('prode_rooms').doc(currentRoom).update(updates);
+  toast('✓ 4 Cuartos de Final cargados');
+}
+
 // ── ADMIN ────────────────────────────────────────────────
 function showAdminLogin() {
   if (isAdmin) { openAdminPanel(); return; }
@@ -2233,7 +2267,17 @@ function renderAdminPanel() {
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Regenera los 16 partidos del R32 usando el bracket real FIFA 2026 y los resultados de grupos.</div>
       <button class="btn btn-primary" onclick="autoFillKnockoutSlots()" style="margin-bottom:8px">⚡ Regenerar R32 automáticamente</button>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;margin-top:6px;">Carga los 8 Octavos reales del Mundial 2026 (CAN-MAR, PAR-FRA, BRA-NOR, MEX-ENG, POR-ESP, USA-BEL, ARG-EGY, SUI-COL).</div>
-      <button class="btn btn-primary" onclick="loadRealR16Slots()" style="margin-bottom:0">⚡ Cargar Octavos reales 2026</button>
+      <button class="btn btn-primary" onclick="loadRealR16Slots()" style="margin-bottom:8px">⚡ Cargar Octavos reales 2026</button>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;margin-top:6px;">Carga los 4 Cuartos de Final reales del Mundial 2026 (FRA-MAR, ESP-BEL, ENG-NOR, ARG-SUI).</div>
+      <button class="btn btn-primary" onclick="loadRealQFSlots()" style="margin-bottom:8px">⚡ Cargar Cuartos reales 2026</button>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;margin-top:6px;">Genera los 4 partidos de Cuartos de Final en base a los ganadores de Octavos.</div>
+      <button class="btn btn-primary" onclick="autoFillQFSlots()" style="margin-bottom:0">⚡ Generar Cuartos desde ganadores de Octavos</button>
+    </div>`;
+    const podLocked = roomData?.podiumLocked;
+    html += `<div class="asec">
+      <div class="asec-title">Predicción de Podio</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Bloqueando el podio los jugadores ya no pueden cambiar su Campeón, Subcampeón y 3er Puesto.</div>
+      <button class="btn btn-primary" onclick="togglePodiumLock()" style="margin-bottom:0">${podLocked ? '🔓 Desbloquear predicciones de podio' : '🔒 Bloquear predicciones de podio'}</button>
     </div>`;
     html += `<div class="asec">
       <div class="asec-title">Equipos clasificados — Rellená los partidos</div>
@@ -2286,6 +2330,12 @@ function renderAdminPanel() {
 async function setPhase(phase) {
   await db.collection('prode_rooms').doc(currentRoom).update({ phase });
   toast('Estado actualizado');
+}
+
+async function togglePodiumLock() {
+  const current = roomData?.podiumLocked || false;
+  await db.collection('prode_rooms').doc(currentRoom).update({ podiumLocked: !current });
+  toast(current ? '🔓 Podio desbloqueado' : '🔒 Podio bloqueado');
 }
 
 function setAdminKoWinner(id, team) {
