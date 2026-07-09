@@ -1379,8 +1379,7 @@ function renderPodiumCard(slots, isOpen) {
 
 const podiumTimers = {};
 function setPodium(slot, team) {
-  if (roomData?.phase !== 'knockout_open') return;
-  if (roomData?.podiumLocked) return;
+  return;
   myPreds[`pod_${slot}`] = team;
   clearTimeout(podiumTimers[slot]);
   podiumTimers[slot] = setTimeout(() => {
