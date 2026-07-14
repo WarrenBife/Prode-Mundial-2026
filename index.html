@@ -1001,6 +1001,7 @@ async function syncResults() {
       if (gm) {
         const rh = flipped ? a : h, ra = flipped ? h : a;
         const ex = currentResults[gm.id];
+        if (ex?.manual) return; // el admin ya lo corrigio a mano — no pisar
         if (!ex || ex.h !== rh || ex.a !== ra) updates[`results.${gm.id}`] = { h: rh, a: ra };
         return;
       }
@@ -1011,6 +1012,7 @@ async function syncResults() {
         else if (slot.home === awayAbbr && slot.away === homeAbbr) { rh = a; ra = h; flippedKo = true; }
         if (rh === null) continue;
         const ex = currentResults[id];
+        if (ex?.manual) break; // el admin ya lo corrigio a mano — no pisar
         const res = { h: rh, a: ra };
         if (rh !== ra) res.winner = rh > ra ? slot.home : slot.away;
         else if (ex?.winner) res.winner = ex.winner; // preservar winner manual (penales)
@@ -2140,6 +2142,25 @@ async function autoFillQFSlots() {
   toast(`✓ ${Object.keys(updates).length} partidos de Cuartos generados`);
 }
 
+async function autoFillSFSlots() {
+  const results = roomData?.results || {};
+  const w = id => results[id]?.winner;
+  const pairs = [
+    ['QF_1','QF_2'], ['QF_3','QF_4'],
+  ];
+  const updates = {};
+  let missing = 0;
+  pairs.forEach(([a, b], i) => {
+    const ha = w(a), hb = w(b);
+    if (ha && hb) updates[`knockoutSlots.SF_${i+1}`] = { home: ha, away: hb };
+    else missing++;
+  });
+  if (!Object.keys(updates).length) { toast('Faltan resultados de Cuartos'); return; }
+  if (missing) toast(`⚠️ Faltan ganadores en ${missing} partido(s) de Cuartos`);
+  await db.collection('prode_rooms').doc(currentRoom).update(updates);
+  toast(`✓ ${Object.keys(updates).length} partido(s) de Semifinal generados`);
+}
+
 async function loadRealQFSlots() {
   const slots = {
     QF_1: { home: 'FRA', away: 'MAR' },
@@ -2270,7 +2291,9 @@ function renderAdminPanel() {
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;margin-top:6px;">Carga los 4 Cuartos de Final reales del Mundial 2026 (FRA-MAR, ESP-BEL, ENG-NOR, ARG-SUI).</div>
       <button class="btn btn-primary" onclick="loadRealQFSlots()" style="margin-bottom:8px">⚡ Cargar Cuartos reales 2026</button>
       <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;margin-top:6px;">Genera los 4 partidos de Cuartos de Final en base a los ganadores de Octavos.</div>
-      <button class="btn btn-primary" onclick="autoFillQFSlots()" style="margin-bottom:0">⚡ Generar Cuartos desde ganadores de Octavos</button>
+      <button class="btn btn-primary" onclick="autoFillQFSlots()" style="margin-bottom:8px">⚡ Generar Cuartos desde ganadores de Octavos</button>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;margin-top:6px;">Genera los 2 partidos de Semifinal en base a los ganadores de Cuartos.</div>
+      <button class="btn btn-primary" onclick="autoFillSFSlots()" style="margin-bottom:0">⚡ Generar Semifinales desde ganadores de Cuartos</button>
     </div>`;
     const podLocked = roomData?.podiumLocked;
     html += `<div class="asec">
@@ -2349,7 +2372,7 @@ function setAdminKoWinner(id, team) {
   const res = roomData?.results?.[id];
   if (res && res.h !== undefined) {
     db.collection('prode_rooms').doc(currentRoom).update({
-      [`results.${id}`]: { h: res.h, a: res.a, winner: team }
+      [`results.${id}`]: { h: res.h, a: res.a, winner: team, manual: true }
     }).then(() => toast(`✓ Clasificado guardado: ${(TI[team]||{n:team}).n}`));
   }
 }
@@ -2359,7 +2382,7 @@ async function saveResult(matchId) {
   const a = document.getElementById('ra_'+matchId)?.value;
   if (h === '' || a === '') { toast('Ingresá ambos valores'); return; }
   const rh = parseInt(h), ra = parseInt(a);
-  const update = { h: rh, a: ra };
+  const update = { h: rh, a: ra, manual: true };
   if (isKOMatch(matchId)) {
     const slot = roomData?.knockoutSlots?.[matchId];
     if (rh !== ra) {
