@@ -307,6 +307,11 @@
   .pod-sel:focus{outline:none;border-color:var(--blue);}
   .pod-sel:disabled{opacity:0.5;cursor:default;}
   .podium-result{font-size:12px;width:100%;padding-top:2px;display:flex;align-items:center;gap:5px;}
+  .podium-allpicks-title{font-size:12px;font-weight:600;color:var(--text-muted);margin:14px 0 8px;}
+  .pod-chip{gap:10px;}
+  .pod-picks{display:flex;gap:6px;flex-shrink:0;}
+  .pod-pick{font-size:16px;opacity:.55;filter:grayscale(60%);}
+  .pod-pick-ok{opacity:1;filter:none;text-shadow:0 0 6px rgba(245,200,66,.6);}
   .pod-ok{color:var(--green);}
   .pod-miss{color:var(--text-dim);}
   .pod-pts-earned{font-weight:700;color:var(--gold);font-size:12px;}
@@ -1169,6 +1174,7 @@ function renderPredict() {
     const cur = available.find(r => r.key === koRoundView) || available[0];
 
     let html = renderPodiumCard(slots, podiumOpen);
+    if (!podiumOpen) html += podiumPredsHtml();
 
     // Nav de rondas (solo si hay más de una)
     if (available.length > 1) {
@@ -1377,6 +1383,43 @@ function renderPodiumCard(slots, isOpen) {
     ${makeRow(3, '🥉 3er Puesto',  3, pod3, actual.third)}
     ${warning}
   </div>`;
+}
+
+// Predicciones de podio (campeón/subcampeón/3er puesto) de todos los
+// jugadores de la sala. Solo se llama cuando el podio ya está cerrado
+// (podiumOpen=false), asi que revelarlas no da ventaja a nadie.
+function podiumPredsHtml() {
+  const players = Object.values(playersData);
+  if (!players.length) return '';
+  const sorted = players.slice().sort((a, b) => {
+    if (a.name === currentPlayer) return -1;
+    if (b.name === currentPlayer) return 1;
+    return a.name.localeCompare(b.name);
+  });
+  const results = roomData?.results || {};
+  const slots   = roomData?.knockoutSlots || {};
+  const actual  = calcActualPodium(results, slots);
+  const flag = t => t ? (TI[t] || { f: '🏳️' }).f : '—';
+  const name = t => t ? (TI[t] || { n: t }).n : 'Sin predicción';
+
+  let chips = '';
+  sorted.forEach(p => {
+    const preds = p.predictions || {};
+    const p1 = preds.pod_1, p2 = preds.pod_2, p3 = preds.pod_3;
+    if (!p1 && !p2 && !p3) return;
+    let cls = 'rp-chip pod-chip';
+    if (p.name === currentPlayer) cls += ' me';
+    const pick = (val, act) => {
+      const ok = act && val === act;
+      return `<span class="pod-pick${ok ? ' pod-pick-ok' : ''}" title="${name(val)}">${flag(val)}</span>`;
+    };
+    chips += `<div class="${cls}">
+      <span class="rp-name">${p.name}${p.name === currentPlayer ? ' (vos)' : ''}</span>
+      <span class="pod-picks">${pick(p1, actual.champion)}${pick(p2, actual.runnerUp)}${pick(p3, actual.third)}</span>
+    </div>`;
+  });
+  if (!chips) return '';
+  return `<div class="podium-allpicks-title">🔎 Predicciones de podio de la sala</div><div class="rp-grid">${chips}</div>`;
 }
 
 const podiumTimers = {};
