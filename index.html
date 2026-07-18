@@ -1161,8 +1161,9 @@ function renderPredict() {
     const KO_PHASE_ROUNDS = [
       { key:'R32', short:'16vos', ids: Array.from({length:16},(_,i)=>`R32_${i+1}`), locked: true  },
       { key:'R16', short:'8vos',  ids: Array.from({length:8}, (_,i)=>`R16_${i+1}`), locked: true  },
-      { key:'QF',  short:'Cuartos', ids: Array.from({length:4},(_,i)=>`QF_${i+1}`), locked: false },
-      { key:'SF',  short:'Semis', ids: ['SF_1','SF_2'],                              locked: false },
+      { key:'QF',  short:'Cuartos', ids: Array.from({length:4},(_,i)=>`QF_${i+1}`), locked: true  },
+      { key:'SF',  short:'Semis', ids: ['SF_1','SF_2'],                              locked: true  },
+      { key:'TPP', short:'3er puesto', ids: ['TPP'],                                 locked: false },
       { key:'F',   short:'Final', ids: ['F'],                                        locked: false },
     ];
     const available = KO_PHASE_ROUNDS.filter(r => r.ids.some(id => slots[id]));
